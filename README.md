@@ -32,10 +32,10 @@ You need to have the following software installed your machine:
 
 
 
-## 🤝 Contributing
+## Contributing
 
 * If you find a bug, please, open an issue and/or provide a pull request.
 
-## 📜 License
+## License
 
 We use the incredibly liberal ["Unlicense" license](LICENSE.md). 
