@@ -1,88 +1,68 @@
-#include <pedalboard_plugin/pedalboard_plugin.h>
 #include <gtest/gtest.h>
+#include <pedalboard_plugin/pedalboard_plugin.h>
 
 namespace pedalboard {
-TEST(JsonSerializer, SerializeToString) {
-  PluginProcessor processor;
-  auto& parameters = processor.getParameterRefs();
+TEST(JsonSerializer, RoundTripsParametersAndPedals) {
+  PluginProcessor sourceProcessor;
+  auto& sourceParameters = sourceProcessor.getParameterRefs();
+  sourceParameters.bypassed = true;
+  sourceParameters.reverbRoomSize = 0.72f;
+  sourceParameters.reverbDamping = 0.36f;
+  sourceParameters.reverbMix = 0.41f;
+  sourceParameters.reverbWidth = 0.83f;
 
-  parameters.rate = 10.f;
-  parameters.bypassed = true;
-  parameters.waveform = 1;
+  std::array<PedalType, pedalSlotCount> sourcePedals{};
+  sourcePedals[1] = PedalType::reverb;
+  sourcePedals[8] = PedalType::reverb;
 
-  const juce::String expectedOutput =
-      u8R"({
-  "__version__": 1,
-  "pluginName": "Tremolo",
-  "modulationRateHz": 10.0,
-  "bypassed": true,
-  "modulationWaveform": "Triangle"
-})";
   juce::MemoryBlock block;
-  juce::MemoryOutputStream outputStream{block, false};
+  juce::MemoryOutputStream output{block, false};
+  JsonSerializer::serialize(sourceParameters, sourcePedals, output);
+  output.flush();
 
-  JsonSerializer::serialize(parameters, outputStream);
-  outputStream.flush();
-
-  const auto result = outputStream.toUTF8().removeCharacters("\r");
-
-  EXPECT_EQ(expectedOutput, result);
-}
-
-TEST(JsonSerializer, DeserializeFromString) {
-  const juce::String savedParameters =
-      u8R"({
-  "__version__": 1,
-  "pluginName": "Tremolo",
-  "modulationRateHz": 10.0,
-  "bypassed": true,
-  "modulationWaveform": "Triangle"
-})";
-
-  juce::MemoryInputStream inputStream{
-      savedParameters.getCharPointer(),
-      static_cast<size_t>(savedParameters.length()), false};
-
-  PluginProcessor processor;
-  auto& parameters = processor.getParameterRefs();
-
-  const auto result = JsonSerializer::deserialize(inputStream, parameters);
+  PluginProcessor destinationProcessor;
+  auto& destinationParameters = destinationProcessor.getParameterRefs();
+  std::array<PedalType, pedalSlotCount> destinationPedals{};
+  juce::MemoryInputStream input{block, false};
+  const auto result = JsonSerializer::deserialize(
+      input, destinationParameters, destinationPedals);
 
   EXPECT_TRUE(result.wasOk());
-  EXPECT_FLOAT_EQ(parameters.rate, 10.f);
-  EXPECT_TRUE(parameters.bypassed);
-  EXPECT_EQ(juce::String{"Triangle"},
-            parameters.waveform.getCurrentChoiceName());
+  EXPECT_TRUE(destinationParameters.bypassed.get());
+  EXPECT_FLOAT_EQ(0.72f, destinationParameters.reverbRoomSize.get());
+  EXPECT_FLOAT_EQ(0.36f, destinationParameters.reverbDamping.get());
+  EXPECT_FLOAT_EQ(0.41f, destinationParameters.reverbMix.get());
+  EXPECT_FLOAT_EQ(0.83f, destinationParameters.reverbWidth.get());
+  EXPECT_EQ(sourcePedals, destinationPedals);
 }
 
-TEST(JsonSerializer, DontUpdateParametersWhenWaveformNameIsInvalid) {
-  // given
-  const juce::String savedParameters =
-      u8R"({
-  "__version__": 1,
-  "pluginName": "Tremolo",
-  "modulationRateHz": 10.0,
-  "bypassed": true,
-  "modulationWaveform": "Foo"
-})";
-
-  juce::MemoryInputStream inputStream{
-      savedParameters.getCharPointer(),
-      static_cast<size_t>(savedParameters.length()), false};
+TEST(JsonSerializer, RejectsUnknownPedalWithoutChangingState) {
+  const juce::String invalidState =
+      R"json({
+        "__version__": 2,
+        "pluginName": "Pedal Board",
+        "bypassed": true,
+        "reverbRoomSize": 0.7,
+        "reverbDamping": 0.4,
+        "reverbMix": 0.3,
+        "reverbWidth": 1.0,
+        "pedals": [
+          "Fuzz", "Empty", "Empty", "Empty", "Empty",
+          "Empty", "Empty", "Empty", "Empty", "Empty"
+        ]
+      })json";
 
   PluginProcessor processor;
   auto& parameters = processor.getParameterRefs();
-  parameters.waveform = 0;
-  parameters.bypassed = false;
-  parameters.rate = 5.f;
+  std::array<PedalType, pedalSlotCount> pedals{};
+  juce::MemoryInputStream input{
+      invalidState.getCharPointer(),
+      static_cast<size_t>(invalidState.getNumBytesAsUTF8()), false};
 
-  // when
-  const auto result = JsonSerializer::deserialize(inputStream, parameters);
+  const auto result = JsonSerializer::deserialize(input, parameters, pedals);
 
-  // then
   EXPECT_TRUE(result.failed());
-  EXPECT_FLOAT_EQ(parameters.rate.get(), 5.f);
   EXPECT_FALSE(parameters.bypassed.get());
-  EXPECT_EQ(0, parameters.waveform.getIndex());
+  EXPECT_EQ(PedalType::empty, pedals[0]);
 }
-}  // namespace tremolo
+}  // namespace pedalboard

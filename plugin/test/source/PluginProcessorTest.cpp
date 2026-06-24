@@ -6,11 +6,27 @@
 
 using namespace wolfsound::literals;
 
-namespace tremolo {
+namespace pedalboard {
 /** This test doesn't test anything but shows that you can instantiate and use a
  * plugin processor in test */
 TEST(PluginProcessor, PlaceholderTest) {
   PluginProcessor processor{};
+}
+
+TEST(PluginProcessor, RestoresPedalLayoutFromPluginState) {
+  PluginProcessor source;
+  ASSERT_TRUE(source.addPedal(3, PedalType::reverb));
+  source.getParameterRefs().reverbMix = 0.63f;
+
+  juce::MemoryBlock state;
+  source.getStateInformation(state);
+
+  PluginProcessor restored;
+  restored.setStateInformation(state.getData(),
+                               static_cast<int>(state.getSize()));
+
+  EXPECT_EQ(PedalType::reverb, restored.getPedal(3));
+  EXPECT_FLOAT_EQ(0.63f, restored.getParameterRefs().reverbMix.get());
 }
 
 class BypassTransitionIsSmoothTest : public testing::Test {
@@ -66,4 +82,4 @@ TEST_F(BypassTransitionIsSmoothTest, ExerciseAllSegments) {
                  static_cast<size_t>(outputBuffer.getNumSamples())},
       sampleRate);
 }
-}  // namespace tremolo
+}  // namespace pedalboard

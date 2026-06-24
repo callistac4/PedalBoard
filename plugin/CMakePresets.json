@@ -7,7 +7,7 @@
   },
   "configurePresets": [
     {
-      "name": "default",J
+      "name": "default",
       "binaryDir": "cmake-build",
       "cacheVariables": {
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",

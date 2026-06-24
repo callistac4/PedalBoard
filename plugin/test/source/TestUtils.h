@@ -10,4 +10,4 @@ inline std::string getFileOutputPath(juce::StringRef fileName) {
       .getFullPathName()
       .toStdString();
 }
-}  // namespace tremolo
+}  // namespace pedalboard

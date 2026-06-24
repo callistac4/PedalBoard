@@ -7,15 +7,18 @@ auto& addParameterToProcessor(juce::AudioProcessor& processor, auto parameter) {
   return result;
 }
 
-juce::AudioParameterFloat& createModulationRateParameter(
-    juce::AudioProcessor& processor) {
+juce::AudioParameterFloat& createFloatParameter(
+    juce::AudioProcessor& processor,
+    const juce::String& id,
+    const juce::String& name,
+    float defaultValue) {
   constexpr auto versionHint = 1;
   return addParameterToProcessor(
       processor,
       std::make_unique<juce::AudioParameterFloat>(
-          juce::ParameterID{"modulation.rate", versionHint}, "Modulation rate",
-          juce::NormalisableRange<float>{0.1f, 20.f, 0.01f, 0.4f}, 5.f,
-          juce::AudioParameterFloatAttributes{}.withLabel("Hz")));
+          juce::ParameterID{id, versionHint}, name,
+          juce::NormalisableRange<float>{0.f, 1.f, 0.001f}, defaultValue,
+          juce::AudioParameterFloatAttributes{}.withLabel("%")));
 }
 
 juce::AudioParameterBool& createBypassedParameter(
@@ -27,19 +30,16 @@ juce::AudioParameterBool& createBypassedParameter(
           juce::ParameterID{"bypassed", versionHint}, "Bypass", false));
 }
 
-juce::AudioParameterChoice& createWaveformParameter(
-    juce::AudioProcessor& processor) {
-  constexpr auto versionHint = 1;
-  return addParameterToProcessor(
-      processor,
-      std::make_unique<juce::AudioParameterChoice>(
-          juce::ParameterID{"modulation.waveform", versionHint},
-          "Modulation waveform", juce::StringArray{"Sine", "Triangle"}, 0));
-}
 }  // namespace
 
 Parameters::Parameters(juce::AudioProcessor& processor)
-    : rate{createModulationRateParameter(processor)},
-      bypassed{createBypassedParameter(processor)},
-      waveform{createWaveformParameter(processor)} {}
-}  // namespace tremolo
+    : bypassed{createBypassedParameter(processor)},
+      reverbRoomSize{createFloatParameter(
+          processor, "reverb.roomSize", "Reverb room size", 0.55f)},
+      reverbDamping{createFloatParameter(
+          processor, "reverb.damping", "Reverb damping", 0.45f)},
+      reverbMix{
+          createFloatParameter(processor, "reverb.mix", "Reverb mix", 0.3f)},
+      reverbWidth{createFloatParameter(
+          processor, "reverb.width", "Reverb width", 1.f)} {}
+}  // namespace pedalboard

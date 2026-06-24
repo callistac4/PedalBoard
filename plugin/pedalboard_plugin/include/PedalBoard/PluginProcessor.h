@@ -1,7 +1,8 @@
 #pragma once
 
 namespace pedalboard {
-class PluginProcessor : public juce::AudioProcessor {
+class PluginProcessor : public juce::AudioProcessor,
+                        public juce::ChangeBroadcaster {
 public:
   PluginProcessor();
 
@@ -36,7 +37,12 @@ public:
   [[nodiscard]] Parameters& getParameterRefs() noexcept;
   juce::AudioProcessorParameter* getBypassParameter() const noexcept override;
 
-  void readAllLfoSamples(juce::AudioBuffer<float>& bufferToFill);
+  [[nodiscard]] PedalType getPedal(size_t slot) const noexcept;
+  [[nodiscard]] std::array<PedalType, pedalSlotCount> getPedals()
+      const noexcept;
+  bool addPedal(size_t slot, PedalType type);
+  bool movePedal(size_t source, size_t destination);
+  void deletePedal(size_t slot);
 
   /** @brief Retrieves the most recent sample rate the processor was given
    * in a thread-safe manner */
@@ -50,4 +56,4 @@ private:
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginProcessor)
 };
-}  // namespace tremolo
+}  // namespace pedalboard

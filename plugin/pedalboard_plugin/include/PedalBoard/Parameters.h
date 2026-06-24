@@ -4,11 +4,13 @@ namespace pedalboard {
 struct Parameters {
   explicit Parameters(juce::AudioProcessor&);
 
-  juce::AudioParameterFloat& rate;
   juce::AudioParameterBool& bypassed;
-  juce::AudioParameterChoice& waveform;
+  juce::AudioParameterFloat& reverbRoomSize;
+  juce::AudioParameterFloat& reverbDamping;
+  juce::AudioParameterFloat& reverbMix;
+  juce::AudioParameterFloat& reverbWidth;
 
   JUCE_DECLARE_NON_COPYABLE(Parameters)
   JUCE_DECLARE_NON_MOVEABLE(Parameters)
 };
-}  // namespace tremolo
+}  // namespace pedalboard

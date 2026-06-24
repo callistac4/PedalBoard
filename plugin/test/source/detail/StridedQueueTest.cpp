@@ -69,4 +69,4 @@ TEST(StridedQueue, pushBack) {
   ASSERT_EQ(80, testee.at(3u));
   ASSERT_EQ(90, testee.at(4u));
 }
-}  // namespace tremolo::detail
+}  // namespace pedalboard::detail

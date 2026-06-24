@@ -200,4 +200,4 @@ TEST_F(BypassTransitionSmootherTest, ForcingBypassOffSkipsTransition) {
     EXPECT_FLOAT_EQ(wetValue, sample);
   }
 }
-}  // namespace tremolo
+}  // namespace pedalboard

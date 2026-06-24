@@ -76,4 +76,4 @@ private:
   size_t elementIndex{0u};
   size_t stride{1u};
 };
-}  // namespace tremolo::detail
+}  // namespace pedalboard::detail

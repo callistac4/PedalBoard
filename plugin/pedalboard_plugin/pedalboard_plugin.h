@@ -10,7 +10,7 @@ BEGIN_JUCE_MODULE_DECLARATION
    description:   Core of the pedalboard plugin
    dependencies:  juce_audio_utils, juce_dsp
 
-   website:       https://thewolfsound.com
+   website:       https://github.com/callistachong/PedalBoard
    license:       MIT
 
 END_JUCE_MODULE_DECLARATION
@@ -36,16 +36,15 @@ END_JUCE_MODULE_DECLARATION
 #include <cmath>
 #include <deque>
 #include <span>
-
+#include <optional>
 #include "include/PedalBoard/detail/StridedQueue.h"
 
+#include "include/PedalBoard/PedalTypes.h"
+#include "include/PedalBoard/ReverbProcessor.h"
 #include "include/PedalBoard/Parameters.h"
-#include "include/PedalBoard/CustomLookAndFeel.h"
 #include "include/PedalBoard/JsonSerializer.h"
-#include "include/PedalBoard/LfoVisualizer.h"
-#include "include/PedalBoard/SampleFifo.h"
 #include "include/PedalBoard/PedalBoard.h"
 #include "include/PedalBoard/BypassTransitionSmoother.h"
 #include "include/PedalBoard/PluginProcessor.h"
-#include "include/PedalBoard/MessageOnClick.h"
 #include "include/PedalBoard/PluginEditor.h"
+#include "include/PedalBoard/ReverbPedalComponent.h"

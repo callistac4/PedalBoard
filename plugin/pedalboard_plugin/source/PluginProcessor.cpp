@@ -22,12 +22,10 @@ bool PluginProcessor::isMidiEffect() const {
 }
 
 double PluginProcessor::getTailLengthSeconds() const {
-  return 0.0;
+  return 8.0;
 }
 
 int PluginProcessor::getNumPrograms() {
-  // Some hosts don't cope very well if you tell them there are 0 programs, so
-  // this should be at least 1, even if you're not really implementing programs.
   return 1;
 }
 
@@ -44,63 +42,46 @@ const juce::String PluginProcessor::getProgramName(int index) {
   return "None";
 }
 
-void PluginProcessor::changeProgramName(int index,
-                                        const juce::String& newName) {
+void PluginProcessor::changeProgramName(int index, const juce::String& newName) {
   juce::ignoreUnused(index, newName);
 }
 
-void PluginProcessor::prepareToPlay(double sampleRate,
-                                    int expectedMaxFramesPerBlock) {
-  currentSampleRate = sampleRate;
+void PluginProcessor::prepareToPlay(double sampleRate, int expectedMaxFramesPerBlock) {
+  juce::dsp::ProcessSpec spec;
+  spec.sampleRate = sampleRate;
+  spec.maximumBlockSize = static_cast<juce::uint32>(expectedMaxFramesPerBlock);
+  spec.numChannels = static_cast<juce::uint32>(getTotalNumOutputChannels());
 
-  pedalboard.prepare(sampleRate, expectedMaxFramesPerBlock);
-
-  bypassTransitionSmoother.prepare(
-      {.sampleRate = sampleRate,
-       .maximumBlockSize = static_cast<uint32_t>(expectedMaxFramesPerBlock),
-       .numChannels = static_cast<uint32_t>(juce::jmax(
-           getTotalNumInputChannels(), getTotalNumOutputChannels()))});
+  currentSampleRate.store(sampleRate);
+  pedalboard.prepare(sampleRate, expectedMaxFramesPerBlock,
+                     getTotalNumOutputChannels());
+  bypassTransitionSmoother.prepare(spec);
 }
 
 void PluginProcessor::releaseResources() {
-  // When playback stops, you can use this as an opportunity to free up any
-  // spare memory, etc.
   pedalboard.reset();
   bypassTransitionSmoother.reset();
 }
 
 bool PluginProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {
-  // This is the place where you check if the layout is supported.
-  // In this template code we only support mono or stereo.
-  // Some plugin hosts, such as certain GarageBand versions, will only
-  // load plugins that support stereo bus layouts.
   if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono() &&
       layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo()) {
     return false;
   }
-
   // This checks if the input layout matches the output layout
   if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet()) {
     return false;
   }
-
   return true;
 }
 
-void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer,
-                                   juce::MidiBuffer& midiMessages) {
+void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
   juce::ignoreUnused(midiMessages);
 
   juce::ScopedNoDenormals noDenormals;
   const auto totalNumInputChannels = getTotalNumInputChannels();
   const auto totalNumOutputChannels = getTotalNumOutputChannels();
 
-  // In case we have more outputs than inputs, this code clears any output
-  // channels that didn't contain input data, (because these aren't
-  // guaranteed to be empty - they may contain garbage).
-  // This is here to avoid people getting screaming feedback
-  // when they first compile a plugin, but obviously you don't need to keep
-  // this code if your algorithm always overwrites all the output channels.
   for (const auto channelToClear :
        std::views::iota(totalNumInputChannels, totalNumOutputChannels)) {
     buffer.clear(channelToClear, 0, buffer.getNumSamples());
@@ -108,31 +89,20 @@ void PluginProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 
   const auto bypassedAndNotTransitioning =
       parameters.bypassed.get() && !bypassTransitionSmoother.isTransitioning();
-  const auto applySmoothing =
-      bypassedAndNotTransitioning ? ApplySmoothing::no : ApplySmoothing::yes;
-
-  // update the parameters
-  // Skip smoothing if fully bypassed to avoid LFO waveform morphing
-  // when parameters change under bypass ON.
-  // For example, if the LFO waveform is the sine, and the user selects
-  // the triangle under bypass ON, they will see a curved triangle slope
-  // on toggling bypass OFF, which is unexpected.
-  pedalboard.setModulationRateHz(parameters.rate, applySmoothing);
-  pedalboard.setLfoWaveform(
-      static_cast<PedalBoard::LfoWaveform>(parameters.waveform.getIndex()),
-      applySmoothing);
 
   bypassTransitionSmoother.setBypass(parameters.bypassed);
 
-  if (bypassedAndNotTransitioning) {
-    // avoid processing if the plugin is fully bypassed
-    return;
-  }
+  // avoid processing if the plugin is fully bypassed
+  if (bypassedAndNotTransitioning) { return; }
 
   bypassTransitionSmoother.setDryBuffer(buffer);
 
-  // apply tremolo
-  pedalboard.process(buffer);
+  pedalboard.process(
+      buffer,
+      {.roomSize = parameters.reverbRoomSize.get(),
+       .damping = parameters.reverbDamping.get(),
+       .mix = parameters.reverbMix.get(),
+       .width = parameters.reverbWidth.get()});
 
   bypassTransitionSmoother.mixToWetBuffer(buffer);
 }
@@ -148,30 +118,24 @@ juce::AudioProcessorEditor* PluginProcessor::createEditor() {
 
 void PluginProcessor::getStateInformation(juce::MemoryBlock& destData) {
   juce::MemoryOutputStream outputStream{destData, true};
-  JsonSerializer::serialize(parameters, outputStream);
+  JsonSerializer::serialize(parameters, pedalboard.getPedals(), outputStream);
 }
 
 void PluginProcessor::setStateInformation(const void* data, int sizeInBytes) {
   juce::MemoryInputStream inputStream{data, static_cast<size_t>(sizeInBytes),
                                       false};
-  const auto result = JsonSerializer::deserialize(inputStream, parameters);
+  auto restoredPedals = pedalboard.getPedals();
+  const auto result =
+      JsonSerializer::deserialize(inputStream, parameters, restoredPedals);
 
   if (result.failed()) {
-    // Notify the user that reading parameters failed.
-    // Currently, we just write the error message to the standard error stream.
     DBG(result.getErrorMessage());
+    return;
   }
 
-  // Skip smoothing to avoid LFO waveform morphing
-  // when loading a project or a preset.
-  // For example, the default LFO waveform is the sine. If the project or preset
-  // has the triangle selected, the user will see a curved triangle slope
-  // on load, which is unexpected.
   bypassTransitionSmoother.setBypassForced(parameters.bypassed);
-  pedalboard.setLfoWaveform(
-      static_cast<PedalBoard::LfoWaveform>(parameters.waveform.getIndex()),
-      ApplySmoothing::no);
-  pedalboard.setModulationRateHz(parameters.rate, ApplySmoothing::no);
+  pedalboard.setPedals(restoredPedals);
+  sendChangeMessage();
 }
 
 Parameters& PluginProcessor::getParameterRefs() noexcept {
@@ -183,18 +147,48 @@ juce::AudioProcessorParameter* PluginProcessor::getBypassParameter()
   return &parameters.bypassed;
 }
 
-void PluginProcessor::readAllLfoSamples(
-    juce::AudioBuffer<float>& bufferToFill) {
-  pedalboard.readAllLfoSamples(bufferToFill);
+PedalType PluginProcessor::getPedal(size_t slot) const noexcept {
+  return pedalboard.getPedal(slot);
+}
+
+std::array<PedalType, pedalSlotCount> PluginProcessor::getPedals()
+    const noexcept {
+  return pedalboard.getPedals();
+}
+
+bool PluginProcessor::addPedal(size_t slot, PedalType type) {
+  if (slot >= pedalSlotCount || type == PedalType::empty ||
+      pedalboard.getPedal(slot) != PedalType::empty) {
+    return false;
+  }
+
+  pedalboard.setPedal(slot, type);
+  sendChangeMessage();
+  return true;
+}
+
+bool PluginProcessor::movePedal(size_t source, size_t destination) {
+  const auto moved = pedalboard.movePedal(source, destination);
+  if (moved) {
+    sendChangeMessage();
+  }
+  return moved;
+}
+
+void PluginProcessor::deletePedal(size_t slot) {
+  if (slot < pedalSlotCount &&
+      pedalboard.getPedal(slot) != PedalType::empty) {
+    pedalboard.setPedal(slot, PedalType::empty);
+    sendChangeMessage();
+  }
 }
 
 double PluginProcessor::getSampleRateThreadSafe() const noexcept {
   return currentSampleRate;
 }
-}  // namespace tremolo
+}  // namespace pedalboard
 
-// This creates new instances of the plugin.
-// This function definition must be in the global namespace.
+// This creates new instances of the plugin. This function definition must be in the global namespace.
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
   return new pedalboard::PluginProcessor();
 }

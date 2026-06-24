@@ -150,4 +150,4 @@ private:
   juce::LinearSmoothedValue<float> wetGain{1.f};
   juce::AudioBuffer<float> dryBuffer;
 };
-}  // namespace tremolo
+}  // namespace pedalboard

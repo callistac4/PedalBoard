@@ -98,20 +98,6 @@ target_compile_definitions(PedalBoardPlugin
     JUCE_VST3_CAN_REPLACE_VST2=0
 )
 
-juce_add_binary_data(pedalboard_plugin_assets
-  HEADER_NAME
-    "PedalBoardPluginAssets.h"
-  NAMESPACE
-    pedalboard::assets
-  SOURCES
-    assets/Background.png
-    assets/Logo.png
-    assets/Inter-Bold.ttf
-    assets/Inter-Medium.ttf
-)
-
-add_library(pedalboard::pedalboard_plugin_assets ALIAS pedalboard_plugin_assets)
-
 juce_add_module(pedalboard_plugin ALIAS_NAMESPACE pedalboard)
 
 # Additional definitions required by all users of this module.
@@ -124,12 +110,11 @@ target_compile_definitions(pedalboard_plugin
 target_compile_options(pedalboard_plugin INTERFACE "${PROJECT_WARNINGS_CXX}")
 
 
-target_link_libraries(pedalboard_plugin INTERFACE pedalboard::pedalboard_plugin_assets)
-
 target_link_libraries(
   PedalBoardPlugin
   PRIVATE
     pedalboard::pedalboard_plugin
+    juce::juce_dsp
   PUBLIC
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags
